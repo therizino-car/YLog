@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f6fa" media="(prefers-color-scheme: light)">
+<meta name="referrer" content="no-referrer">
+<title>YLog 차계부 · Model Y</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--fg:#0f172a;--mut:#64748b;--line:#e2e8f0;--acc:#e31937;--blue:#2563eb;--ok:#16a34a;--est:#d97706;--none:#94a3b8;--home:#7c3aed;--out:#0891b2;--shadow:0 1px 3px rgba(15,23,42,.08)}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#141c2f;--fg:#e5e9f2;--mut:#94a3b8;--line:#243049;--shadow:none}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;-webkit-text-size-adjust:100%}
+body{padding:env(safe-area-inset-top) 0 calc(24px + env(safe-area-inset-bottom))}
+.wrap{max-width:560px;margin:0 auto;padding:12px 14px}
+header{display:flex;align-items:center;gap:10px;padding:6px 2px 10px}
+header h1{font-size:20px;margin:0;flex:1}
+header h1 small{display:block;font-size:12px;font-weight:500;color:var(--mut)}
+button{font:inherit;color:inherit;cursor:pointer}
+.btn{min-height:44px;min-width:44px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:0 14px;font-weight:600;box-shadow:var(--shadow)}
+.btn:active{transform:scale(.97)}
+.status{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--mut);margin-bottom:10px}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;line-height:1.3;white-space:nowrap}
+.b-ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.b-est{background:color-mix(in srgb,var(--est) 18%,transparent);color:var(--est)}
+.b-none{background:color-mix(in srgb,var(--none) 20%,transparent);color:var(--mut)}
+.b-home{background:color-mix(in srgb,var(--home) 15%,transparent);color:var(--home)}
+.b-out{background:color-mix(in srgb,var(--out) 15%,transparent);color:var(--out)}
+.b-live{background:color-mix(in srgb,var(--blue) 15%,transparent);color:var(--blue)}
+.b-off{background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+.kpi .l{font-size:12px;color:var(--mut)}
+.kpi .v{font-size:22px;font-weight:800;margin-top:4px;letter-spacing:-.3px}
+.kpi .v small{font-size:13px;font-weight:600;color:var(--mut);margin-left:2px}
+.kpi .s{font-size:11px;color:var(--mut);margin-top:3px}
+h2{font-size:16px;margin:22px 2px 10px}
+.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.tab{min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-weight:700;white-space:nowrap}
+.tab[aria-selected=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.rows{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;font-size:14px;margin-top:6px}
+.rows dt{color:var(--mut)}.rows dd{margin:0;text-align:right;font-weight:600}
+.note{font-size:12px;color:var(--mut);margin-top:10px;line-height:1.5}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--mut);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.seg{display:flex;gap:8px;margin-bottom:10px}
+.seg .tab{flex:1;min-height:40px;padding:0 8px}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:12px 14px}
+.item .d{font-size:12px;color:var(--mut)}
+.item .p{font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .m{font-size:13px;color:var(--mut);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.item .a{text-align:right;font-weight:800;font-size:16px;align-self:center}
+.item .a .badge{display:block;margin-top:4px;text-align:center}
+.item .r{grid-column:1/-1;font-size:12px;color:var(--mut);line-height:1.45}
+.alert{border-left:4px solid var(--acc);font-size:13px;line-height:1.55;display:none}
+.alert.show{display:block}
+details{font-size:13px;line-height:1.6}
+summary{min-height:44px;display:flex;align-items:center;font-weight:700;cursor:pointer}
+code{font-size:12px;word-break:break-all;background:color-mix(in srgb,var(--mut) 15%,transparent);padding:1px 4px;border-radius:4px}
+.empty{color:var(--mut);text-align:center;padding:20px;font-size:14px}
+footer{font-size:11px;color:var(--mut);text-align:center;margin-top:20px}
+.auth{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.auth .who{font-size:12px;color:var(--mut);flex:1;min-width:120px}
+.btn-g{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1f1f1f;border:1px solid #dadce0}
+@media (prefers-color-scheme:dark){.btn-g{background:#131314;color:#e3e3e3;border-color:#8e918f}}
+.btn-g svg{width:18px;height:18px}
+.btn[hidden]{display:none}
+.btn:disabled{opacity:.55}
+.alert.info{border-left-color:var(--blue)}
+.alert.warn{border-left-color:var(--est)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>⚡ YLog 차계부<small>Tesla Model Y · 2026-09-23 출고</small></h1>
+  <button class="btn" id="refresh" aria-label="새로고침">↻ 새로고침</button>
+</header>
+
+<div class="auth">
+  <span class="who" id="who">로그인하지 않음</span>
+  <button class="btn btn-g" id="loginBtn" type="button"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span id="loginLabel">Google로 로그인</span></button>
+  <button class="btn" id="logoutBtn" type="button" hidden>로그아웃</button>
+</div>
+<div class="status"><span id="srcBadge" class="badge b-none">불러오는 중…</span><span id="updated"></span></div>
+
+<div class="card alert" id="alert" role="status"></div>
+
+<section class="grid" id="kpis"></section>
+
+<h2>월별 현황</h2>
+<div class="tabs" id="monthTabs" role="tablist"></div>
+<div class="card" id="monthCard" style="margin-top:10px"></div>
+
+<h2>월별 그래프</h2>
+<div class="card chart">
+  <div class="seg" role="tablist" id="chartSeg">
+    <button class="tab" data-k="cost" aria-selected="true">충전비</button>
+    <button class="tab" data-k="dist" aria-selected="false">주행거리</button>
+    <button class="tab" data-k="kwh" aria-selected="false">충전량</button>
+  </div>
+  <div id="chart"></div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<h2>충전 기록</h2>
+<div class="seg" role="tablist" id="filterSeg">
+  <button class="tab" data-f="all" aria-selected="true">전체</button>
+  <button class="tab" data-f="집" aria-selected="false">집</button>
+  <button class="tab" data-f="외부" aria-selected="false">외부</button>
+</div>
+<div class="list" id="chargeList"></div>
+
+<h2>도움말</h2>
+<div class="card"><details>
+<summary>구글 로그인으로 시트 읽기</summary>
+<p>이 페이지는 비공개 구글 시트 <b>YLog-차계부</b>의 <b>충전기록</b>·<b>월별요약</b> 탭을, <b>Google로 로그인</b>한 본인 계정 권한으로 읽어 와요. 시트를 공개할 필요가 없어요.</p>
+<ul>
+<li>권한은 <b>읽기 전용</b>(<code>spreadsheets.readonly</code>)만 요청해요. 페이지가 시트를 수정할 수 없어요.</li>
+<li>로그인 토큰은 이 탭의 메모리에만 두고 저장하지 않아요. 약 1시간 뒤 만료되면 조용히 다시 받아 오고, 안 되면 <b>다시 로그인</b> 버튼이 보여요.</li>
+<li>로그인 전이거나 읽기에 실패하면 페이지에 내장된 <b>오프라인 스냅샷</b>을 보여 줘요.</li>
+<li>로그인은 <code>https://</code> 주소(예: GitHub Pages)에서만 동작해요. 파일로 직접 열면 스냅샷만 보여요.</li>
+</ul>
+<p><b>처음 설정</b>: Google Cloud 콘솔에서 웹 애플리케이션용 OAuth 클라이언트 ID를 만들고, <b>승인된 JavaScript 원본</b>에 이 페이지의 주소(예: <code>https://아이디.github.io</code>)를 넣은 뒤, HTML 상단 <code>CONFIG.CLIENT_ID</code>를 그 값으로 바꿔요.</p>
+<p>현재 페이지 원본: <code id="originHint"></code></p>
+</details></div>
+<footer>추정kWh = 충전% × 81.3 kWh(추정 용량). 집 충전 금액은 다음 달 말 관리비로 청구되기 전까지 추정값이에요.</footer>
+</div>
+
+<script>
+"use strict";
+/* ===== CONFIG ===== */
+const CONFIG = {
+  CLIENT_ID: 'YOUR_CLIENT_ID.apps.googleusercontent.com', // ← Google Cloud OAuth 클라이언트 ID로 교체
+  SHEET_ID: "1nlu2pbZHmHkmL4DKLGDJqS-HkweU1SZtkSJpAx0545k",   // 비밀 아님
+  SCOPE: "https://www.googleapis.com/auth/spreadsheets.readonly",
+  TABS: { charges: "충전기록", summary: "월별요약" },
+  TIMEOUT_MS: 15000,
+  LS_FLAG: "ylog.signedInBefore"
+};
+const SNAPSHOT = {"generatedAt":"2026-10-28 22:43 KST","charges":[{"날짜":"2026-09-23","시각":"22:15","장소":"경기 오산시 외삼미동 559","구분":"외부","충전":38,"kwh":30.9,"금액":11526,"상태":"확정","결제":"KB비즈티타늄","귀속월":"2026-09","월":"2026-09","비고":"슈퍼차저"},{"날짜":"2026-09-25","시각":"13:08","장소":"경기도 수원시 권선구 세화로 134","구분":"외부","충전":16,"kwh":13,"금액":4631,"상태":"확정","결제":"신한샵페이","귀속월":"2026-09","월":"2026-09","비고":""},{"날짜":"2026-09-26","시각":"11:29","장소":"2층 205호 · 인천광역시 서해구 서달로116번길 12","구분":"외부","충전":4,"kwh":3.3,"금액":909,"상태":"확정","결제":"신한샵페이","귀속월":"2026-09","월":"2026-09","비고":""},{"날짜":"2026-09-26","시각":"12:10","장소":"인천 검단구 청마로167번길 15","구분":"외부","충전":null,"kwh":null,"금액":191,"상태":"확정","결제":"MG하나카드","귀속월":"2026-09","월":"2026-09","비고":"후잉 결제시각 12:10:42 기준 위치 매칭(12:07 도착~14:36 주차); 충전량 극소(%에 미반영)"},{"날짜":"2026-09-26","시각":"15:08","장소":"드림파크 야생화공원 제1주차장","구분":"외부","충전":1,"kwh":0.8,"금액":224,"상태":"확정","결제":"KB비즈티타늄","귀속월":"2026-09","월":"2026-09","비고":""},{"날짜":"2026-09-26","시각":"19:17","장소":"2층 205호 · 인천광역시 서해구 서달로116번길 12","구분":"외부","충전":25,"kwh":20.3,"금액":6897,"상태":"확정","결제":"신한샵페이","귀속월":"2026-09","월":"2026-09","비고":"후잉 6,897원을 이 충전으로 추정 매칭(시트에 금액 없음)"},{"날짜":"2026-09-30","시각":"08:21","장소":"집 · 경기도 오산시 수청로 13","구분":"집","충전":43,"kwh":35,"금액":6430,"상태":"확정","결제":"롯데LOCA","귀속월":"2026-09","월":"2026-09","비고":"집 충전 → 10월 관리비(417,750원)에서 분리한 \"전월 전기차 충전\""},{"날짜":"2026-10-05","시각":"09:36","장소":"집 · 경기도 오산시 수청로 13","구분":"집","충전":47,"kwh":38.2,"금액":7028,"상태":"추정","결제":"","귀속월":"2026-10","월":"2026-10","비고":"집 충전 → 다음 달 말 관리비 청구 전 추정(9월 실제 단가 183.9원/kWh 기준). 청구되면 확정값으로 교체"},{"날짜":"2026-10-05","시각":"15:32","장소":"아일랜드리솜 태안 · 충청남도 태안군 안면읍 765-218","구분":"외부","충전":3,"kwh":2.4,"금액":846,"상태":"확정","결제":"일렉링크 포인트","귀속월":"2026-10","월":"2026-10","비고":"일렉링크 포인트 차감분(사용자 확인), 후잉 기록 없음"},{"날짜":"2026-10-06","시각":"11:38","장소":"아일랜드리솜 태안 · 충청남도 태안군 안면읍 765-218","구분":"외부","충전":4,"kwh":3.3,"금액":805,"상태":"확정","결제":"일렉링크 포인트","귀속월":"2026-10","월":"2026-10","비고":"일렉링크 포인트 차감분(사용자 확인), 후잉 기록 없음"},{"날짜":"2026-10-06","시각":"15:48","장소":"충청남도 당진시 신평면 516-56","구분":"외부","충전":23,"kwh":18.7,"금액":7458,"상태":"확정","결제":"KB비즈티타늄","귀속월":"2026-10","월":"2026-10","비고":"슈퍼차저"},{"날짜":"2026-10-09","시각":"11:13","장소":"집 · 경기도 오산시 수청로 13","구분":"집","충전":37,"kwh":30.1,"금액":5533,"상태":"추정","결제":"","귀속월":"2026-10","월":"2026-10","비고":"집 충전 → 다음 달 말 관리비 청구 전 추정(9월 실제 단가 183.9원/kWh 기준). 청구되면 확정값으로 교체"},{"날짜":"2026-10-13","시각":"08:21","장소":"집 · 경기도 오산시 수청로 13","구분":"집","충전":41,"kwh":33.3,"금액":6131,"상태":"추정","결제":"","귀속월":"2026-10","월":"2026-10","비고":"집 충전 → 다음 달 말 관리비 청구 전 추정(9월 실제 단가 183.9원/kWh 기준). 청구되면 확정값으로 교체"},{"날짜":"2026-10-20","시각":"08:11","장소":"집 · 경기도 오산시 수청로 13","구분":"집","충전":41,"kwh":33.3,"금액":6131,"상태":"추정","결제":"","귀속월":"2026-10","월":"2026-10","비고":"집 충전 → 다음 달 말 관리비 청구 전 추정(9월 실제 단가 183.9원/kWh 기준). 청구되면 확정값으로 교체"},{"날짜":"2026-10-24","시각":"15:35","장소":"경기도 화성시 동탄1동 200","구분":"외부","충전":17,"kwh":13.8,"금액":4534,"상태":"확정","결제":"KB비즈티타늄","귀속월":"2026-10","월":"2026-10","비고":""}],"summary":[{"월":"2026-09","주행거리":539.3,"운행수":26,"충전횟수":6,"충전합":127,"kwh":103.3,"확정":30808,"추정":0,"합계":30808,"전비":7.9,"whkm":127,"월초오도":10.1,"월말오도":549.4,"운행거리합":518.5,"에너지":65.6,"비고":"월초 오도미터 = 구매 시점(첫 운행 출발) 추정값. 충전비 = 외부 확정 + 전월 전기차 충전(집, 10/27 후잉 기록) + 9/26 191원(청마로167번길 15 외부, 극소량)"},{"월":"2026-10","주행거리":1035.5,"운행수":68,"충전횟수":8,"충전합":213,"kwh":173.1,"확정":13643,"추정":24823,"합계":38466,"전비":7.01,"whkm":143,"월초오도":549.4,"월말오도":1584.9,"운행거리합":1022.9,"에너지":145.9,"비고":"집 충전 4회(10/5·10/9·10/13·10/20)는 11월 말 관리비 청구 전까지 추정. 태안 리솜 2건은 후잉 미기록. 10/5·10/6 일렉링크 포인트 846원+805원 확정에 포함"}]};
+
+/*__PARSE_START__*/
+const toNum = v => { if (v == null) return null; const s = String(v).replace(/[,\s원%]/g, ""); if (s === "" || s === "-") return null; const n = Number(s); return isNaN(n) ? null : n; };
+function normDate(s) { const m = String(s || "").match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/); return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : String(s || ""); }
+function normMonth(s) { const m = String(s || "").match(/(\d{4})\D+(\d{1,2})/); return m ? `${m[1]}-${m[2].padStart(2, "0")}` : String(s || ""); }
+// Sheets API values (2D array, trailing empty cells omitted) → objects keyed by header
+function valuesToObjects(values, required) {
+  if (!Array.isArray(values) || values.length < 1) throw new Error("빈 탭");
+  const h = values[0].map(s => String(s ?? "").trim());
+  const miss = (required || []).filter(k => !h.includes(k));
+  if (miss.length) throw new Error("시트 머리글이 달라요: " + miss.join(", ") + " 없음");
+  return values.slice(1)
+    .filter(r => Array.isArray(r) && r.some(x => String(x ?? "").trim() !== ""))
+    .map(r => Object.fromEntries(h.map((k, i) => [k, String(r[i] ?? "").trim()])));
+}
+const CHARGE_COLS = ["날짜", "시각", "장소", "구분", "충전%", "추정kWh", "금액(원)", "금액상태", "결제수단", "후잉귀속월", "비고"];
+const SUMMARY_COLS = ["월", "주행거리(km)", "운행수", "충전횟수", "충전%합", "추정kWh", "충전비 확정(원)", "충전비 추정(원)", "충전비 합계(원)", "전비(km/kWh)", "Wh/km", "월말 오도미터", "운행거리합(km)", "소비에너지(kWh)", "비고"];
+function mapCharges(values) {
+  return valuesToObjects(values, CHARGE_COLS).filter(o => /\d{4}/.test(o["날짜"])).map(o => {
+    const amt = toNum(o["금액(원)"]);
+    return {
+      날짜: normDate(o["날짜"]), 시각: o["시각"] || "", 장소: o["장소"] || "", 구분: o["구분"] || "",
+      충전: toNum(o["충전%"]), kwh: toNum(o["추정kWh"]), 금액: amt,
+      상태: o["금액상태"] || (amt == null ? "미기록" : ""), 결제: o["결제수단"] || "",
+      귀속월: normMonth(o["후잉귀속월"]), 월: normMonth(o["충전월"] || o["날짜"]), 비고: o["비고"] || ""
+    };
+  });
+}
+function mapSummary(values) {
+  return valuesToObjects(values, SUMMARY_COLS).filter(o => /\d{4}/.test(o["월"] || "")).map(o => {
+    const 확정 = toNum(o["충전비 확정(원)"]) ?? 0, 추정 = toNum(o["충전비 추정(원)"]) ?? 0;
+    return {
+      월: normMonth(o["월"]), 주행거리: toNum(o["주행거리(km)"]), 운행수: toNum(o["운행수"]), 충전횟수: toNum(o["충전횟수"]),
+      충전합: toNum(o["충전%합"]), kwh: toNum(o["추정kWh"]), 확정, 추정,
+      합계: toNum(o["충전비 합계(원)"]) ?? (확정 + 추정), 전비: toNum(o["전비(km/kWh)"]), whkm: toNum(o["Wh/km"]),
+      월초오도: toNum(o["월초 오도미터"]), 월말오도: toNum(o["월말 오도미터"]), 운행거리합: toNum(o["운행거리합(km)"]),
+      에너지: toNum(o["소비에너지(kWh)"]), 비고: o["비고"] || ""
+    };
+  });
+}
+/*__PARSE_END__*/
+
+const $ = s => document.querySelector(s);
+const won = n => (n == null || isNaN(n)) ? "-" : Math.round(n).toLocaleString("ko-KR");
+const num = (n, d = 1) => (n == null || isNaN(n)) ? "-" : Number(n).toLocaleString("ko-KR", { minimumFractionDigits: 0, maximumFractionDigits: d });
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtTime = d => d.toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+/* ===== Auth (Google Identity Services, token model) ===== */
+const isConfigured = () => !!CONFIG.CLIENT_ID && !/^YOUR_CLIENT_ID/.test(CONFIG.CLIENT_ID) && /\.apps\.googleusercontent\.com$/.test(CONFIG.CLIENT_ID);
+const isSecureOrigin = () => location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const AUTH = { client: null, token: null, expiresAt: 0, pending: null, gisReady: false, timer: null };
+const hasFlag = () => { try { return localStorage.getItem(CONFIG.LS_FLAG) === "1"; } catch { return false; } };
+const setFlag = on => { try { on ? localStorage.setItem(CONFIG.LS_FLAG, "1") : localStorage.removeItem(CONFIG.LS_FLAG); } catch {} };
+const tokenValid = () => !!AUTH.token && Date.now() < AUTH.expiresAt - 60000;
+
+function loadGIS() {
+  return new Promise((res, rej) => {
+    if (window.google?.accounts?.oauth2) return res();
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client"; s.async = true; s.defer = true;
+    s.onload = () => res(); s.onerror = () => rej(new Error("Google 로그인 스크립트를 불러오지 못했어요"));
+    document.head.appendChild(s);
+  });
+}
+function initClient() {
+  AUTH.client = google.accounts.oauth2.initTokenClient({
+    client_id: CONFIG.CLIENT_ID,
+    scope: CONFIG.SCOPE,
+    callback: resp => {
+      const p = AUTH.pending; AUTH.pending = null;
+      if (resp && resp.access_token && google.accounts.oauth2.hasGrantedAllScopes(resp, CONFIG.SCOPE)) {
+        AUTH.token = resp.access_token;
+        AUTH.expiresAt = Date.now() + (Number(resp.expires_in) || 3599) * 1000;
+        setFlag(true); scheduleExpiry();
+        p && p.resolve(AUTH.token);
+      } else {
+        AUTH.token = null;
+        p && p.reject(new Error(resp?.error_description || resp?.error || "시트 읽기 권한이 허용되지 않았어요"));
+      }
+    },
+    error_callback: err => {
+      const p = AUTH.pending; AUTH.pending = null;
+      const msg = { popup_closed: "로그인 창이 닫혔어요", popup_failed_to_open: "로그인 창을 열 수 없어요(팝업 차단)" }[err?.type] || (err?.message || "로그인 오류");
+      p && p.reject(Object.assign(new Error(msg), { type: err?.type }));
+    }
+  });
+  AUTH.gisReady = true;
+}
+// interactive=false → prompt:'' (조용히, 이전 동의가 있으면 창 없이 발급)
+function requestToken(interactive) {
+  if (!AUTH.client) return Promise.reject(new Error("로그인 준비가 안 됐어요"));
+  if (AUTH.pending) AUTH.pending.reject(new Error("새 요청으로 대체됨"));
+  return new Promise((resolve, reject) => {
+    AUTH.pending = { resolve, reject };
+    try { AUTH.client.requestAccessToken(interactive ? (hasFlag() ? { prompt: "" } : {}) : { prompt: "" }); }
+    catch (e) { AUTH.pending = null; reject(e); }
+  });
+}
+function scheduleExpiry() {
+  clearTimeout(AUTH.timer);
+  const ms = Math.max(0, AUTH.expiresAt - Date.now() - 60000);
+  AUTH.timer = setTimeout(async () => {
+    try { await requestToken(false); updateAuthUI(); }
+    catch { AUTH.token = null; updateAuthUI("expired"); }
+  }, ms);
+}
+async function ensureToken(interactive) {
+  if (tokenValid()) return AUTH.token;
+  return requestToken(interactive); // 클릭 시 바로 요청해야 팝업이 막히지 않아요
+}
+function logout() {
+  const t = AUTH.token;
+  AUTH.token = null; AUTH.expiresAt = 0; clearTimeout(AUTH.timer); setFlag(false);
+  if (t && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(t, () => {});
+  showSnapshot("logout");
+}
+
+/* ===== Sheets API ===== */
+const valuesURL = tab => `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(CONFIG.SHEET_ID)}/values/${encodeURIComponent(tab)}?valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS`;
+async function fetchValues(tab, token) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), CONFIG.TIMEOUT_MS);
+  try {
+    const r = await fetch(valuesURL(tab), { headers: { Authorization: "Bearer " + token }, signal: ctl.signal, cache: "no-store" });
+    if (!r.ok) {
+      let msg = ""; try { msg = (await r.json())?.error?.message || ""; } catch {}
+      throw Object.assign(new Error(r.status === 403 ? "이 계정에는 시트 읽기 권한이 없어요" : r.status === 404 ? "시트나 탭을 찾을 수 없어요" : `HTTP ${r.status}${msg ? " · " + msg : ""}`), { status: r.status });
+    }
+    return (await r.json()).values || [];
+  } finally { clearTimeout(t); }
+}
+async function fetchAll(token) {
+  const [c, s] = await Promise.all([fetchValues(CONFIG.TABS.charges, token), fetchValues(CONFIG.TABS.summary, token)]);
+  const charges = mapCharges(c), summary = mapSummary(s);
+  if (!summary.length) throw new Error("월별요약에 데이터가 없어요");
+  return { charges, summary };
+}
+
+/* ===== State / UI ===== */
+let STATE = { charges: SNAPSHOT.charges, summary: SNAPSHOT.summary, source: "snapshot", month: null, chart: "cost", filter: "all", loadedAt: null };
+let BUSY = false;
+
+function setAlert(html, kind) {
+  const a = $("#alert");
+  if (!html) { a.className = "card alert"; a.innerHTML = ""; return; }
+  a.className = "card alert show" + (kind ? " " + kind : ""); a.innerHTML = html;
+}
+function updateAuthUI(mode) {
+  const live = tokenValid();
+  $("#logoutBtn").hidden = !(live || hasFlag());
+  $("#loginBtn").hidden = live;
+  $("#loginBtn").disabled = !isConfigured() || !isSecureOrigin() || BUSY;
+  $("#loginLabel").textContent = (mode === "expired" || (hasFlag() && !live)) ? "다시 로그인" : "Google로 로그인";
+  $("#who").textContent = live ? `로그인됨 · 토큰 만료 ${new Date(AUTH.expiresAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`
+    : mode === "expired" ? "로그인이 만료됐어요" : "로그인하지 않음";
+  $("#refresh").disabled = BUSY;
+}
+function applyData(src, data) {
+  STATE = { ...STATE, ...data, source: src, loadedAt: new Date() };
+  const months = STATE.summary.map(s => s.월);
+  if (!months.includes(STATE.month)) STATE.month = months[months.length - 1];
+  $("#srcBadge").className = "badge " + (src === "live" ? "b-live" : "b-off");
+  $("#srcBadge").textContent = src === "live" ? "구글 시트 실시간" : "오프라인 스냅샷";
+  $("#updated").textContent = "마지막 갱신 " + fmtTime(STATE.loadedAt) + (src === "snapshot" ? ` · 데이터 기준 ${SNAPSHOT.generatedAt}` : "");
+  render();
+}
+function showSnapshot(reason, err) {
+  applyData("snapshot", { charges: SNAPSHOT.charges, summary: SNAPSHOT.summary });
+  const base = `지금은 <b>오프라인 스냅샷</b>(${esc(SNAPSHOT.generatedAt)} 기준)을 보여 드려요.`;
+  if (!isConfigured()) setAlert(`<b>설정이 필요해요.</b> HTML 상단 <code>CONFIG.CLIENT_ID</code>가 아직 <code>YOUR_CLIENT_ID…</code> 상태예요. Google Cloud에서 만든 OAuth 클라이언트 ID(<code>….apps.googleusercontent.com</code>)로 바꾸면 Google 로그인으로 시트를 읽을 수 있어요.<br>${base}`, "warn");
+  else if (!isSecureOrigin()) setAlert(`<b>https 주소에서 열어 주세요.</b> Google 로그인은 <code>https://</code> 페이지(예: GitHub Pages)에서만 동작해요.<br>${base}`, "warn");
+  else if (reason === "logout") setAlert(`로그아웃했어요. ${base}`, "info");
+  else if (reason === "error") setAlert(`<b>구글 시트를 읽지 못했어요</b> (${esc(err?.name === "AbortError" ? "시간 초과" : err?.message || err)}).<br>${base} <b>Google로 로그인</b> 또는 <b>새로고침</b>을 눌러 다시 시도해 보세요.`);
+  else if (reason === "expired") setAlert(`로그인이 만료됐어요. <b>다시 로그인</b>을 누르면 최신 데이터를 읽어 와요.<br>${base}`, "info");
+  else setAlert(`<b>Google로 로그인</b>하면 비공개 시트에서 최신 데이터를 읽어 와요.<br>${base}`, "info");
+  updateAuthUI(reason === "expired" ? "expired" : undefined);
+}
+
+// interactive: 버튼 클릭 등 사용자 동작에서 호출될 때 true (팝업 허용)
+async function loadLive(interactive) {
+  if (BUSY) return; BUSY = true; updateAuthUI();
+  $("#srcBadge").className = "badge b-none"; $("#srcBadge").textContent = "불러오는 중…";
+  try {
+    let token = await ensureToken(interactive);
+    let data;
+    try { data = await fetchAll(token); }
+    catch (e) {
+      if (e.status !== 401) throw e;
+      AUTH.token = null; token = await ensureToken(interactive); data = await fetchAll(token);
+    }
+    applyData("live", data); setAlert("");
+  } catch (e) {
+    let reason = "error";
+    if (e.type === "popup_closed") reason = "idle";
+    else if (!e.status && !interactive && hasFlag()) reason = "expired"; // 조용한 재요청 실패 → 다시 로그인 필요
+    showSnapshot(reason, e);
+  } finally { BUSY = false; updateAuthUI(); }
+}
+
+const statusBadge = s => s === "확정" ? `<span class="badge b-ok">확정</span>` : s === "추정" ? `<span class="badge b-est">추정</span>` : `<span class="badge b-none">${esc(s || "미기록")}</span>`;
+const mLabel = m => { const [y, mm] = String(m).split("-"); return `${String(y).slice(2)}년 ${Number(mm)}월`; };
+
+function render() {
+  const S = STATE.summary, C = STATE.charges;
+  const last = S[S.length - 1] || {};
+  const odo = Math.max(0, ...S.map(s => s.월말오도 || 0));
+  const totCost = S.reduce((a, s) => a + (s.합계 ?? (s.확정 + s.추정)), 0);
+  const totEst = S.reduce((a, s) => a + (s.추정 || 0), 0);
+  const dist = S.reduce((a, s) => a + (s.운행거리합 || 0), 0), en = S.reduce((a, s) => a + (s.에너지 || 0), 0);
+  const eff = en ? dist / en : null;
+  const totDrive = S.reduce((a, s) => a + (s.주행거리 || 0), 0);
+  $("#kpis").innerHTML = [
+    ["누적 주행거리", num(totDrive), "km", `오도미터 ${num(odo)} km`],
+    [`이번 달 주행 (${last.월 ? Number(last.월.slice(5)) + "월" : "-"})`, num(last.주행거리), "km", `운행 ${num(last.운행수, 0)}건`],
+    ["누적 충전비", won(totCost), "원", totEst ? `추정 ${won(totEst)}원 포함` : "모두 확정"],
+    ["평균 전비", num(eff, 2), "km/kWh", eff ? `${num(1000 / eff, 0)} Wh/km` : ""]
+  ].map(([l, v, u, s]) => `<div class="card kpi"><div class="l">${esc(l)}</div><div class="v">${v}<small>${u}</small></div><div class="s">${esc(s)}</div></div>`).join("");
+
+  $("#monthTabs").innerHTML = S.map(s => `<button class="tab" role="tab" data-m="${esc(s.월)}" aria-selected="${s.월 === STATE.month}">${mLabel(s.월)}</button>`).join("");
+  const m = S.find(s => s.월 === STATE.month) || last;
+  const cStatus = m.추정 > 0 ? (m.확정 > 0 ? `<span class="badge b-ok">확정 ${won(m.확정)}</span> <span class="badge b-est">추정 ${won(m.추정)}</span>` : statusBadge("추정")) : statusBadge("확정");
+  const mc = C.filter(c => c.월 === m.월 && c.충전 != null);
+  const nh = mc.filter(c => c.구분 === "집").length, no = mc.filter(c => c.구분 === "외부").length;
+  $("#monthCard").innerHTML = m.월 ? `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <div style="font-size:13px;color:var(--mut)">${mLabel(m.월)} 충전비</div><div>${cStatus}</div></div>
+    <div style="font-size:28px;font-weight:800;margin:4px 0 8px">${won(m.합계)}<small style="font-size:14px;color:var(--mut)"> 원</small></div>
+    <dl class="rows">
+      <dt>주행거리</dt><dd>${num(m.주행거리)} km</dd>
+      <dt>운행</dt><dd>${num(m.운행수, 0)}건</dd>
+      <dt>충전</dt><dd>${num(m.충전횟수, 0)}회 (집 ${nh} · 외부 ${no})</dd>
+      <dt>충전량(추정)</dt><dd>${num(m.충전합, 0)}% · ${num(m.kwh)} kWh</dd>
+      <dt>전비</dt><dd>${num(m.전비, 2)} km/kWh · ${num(m.whkm, 0)} Wh/km</dd>
+      <dt>kWh당 충전비</dt><dd>${m.kwh ? won(m.합계 / m.kwh) : "-"} 원</dd>
+    </dl>${m.비고 ? `<div class="note">${esc(m.비고)}</div>` : ""}` : `<div class="empty">데이터가 없어요</div>`;
+
+  renderChart();
+  const list = C.filter(c => STATE.filter === "all" || c.구분 === STATE.filter).slice().sort((a, b) => (b.날짜 + b.시각).localeCompare(a.날짜 + a.시각));
+  $("#chargeList").innerHTML = list.length ? list.map(c => {
+    const kind = c.구분 === "집" ? `<span class="badge b-home">집</span>` : c.구분 === "외부" ? `<span class="badge b-out">외부</span>` : `<span class="badge b-none">${esc(c.구분 || "미상")}</span>`;
+    const amt = c.금액 == null ? `<span style="color:var(--mut);font-size:14px">미기록</span>` : `${won(c.금액)}원`;
+    return `<div class="card item">
+      <div><div class="d">${esc(c.날짜)} ${esc(c.시각)}${c.결제 ? " · " + esc(c.결제) : ""}</div>
+        <div class="p">${esc(c.장소)}</div>
+        <div class="m">${kind}${c.충전 != null ? `<span>+${num(c.충전, 0)}%</span><span>≈ ${num(c.kwh)} kWh</span>` : ""}</div></div>
+      <div class="a">${amt}${statusBadge(c.상태)}</div>
+      ${c.비고 ? `<div class="r">${esc(c.비고)}</div>` : ""}
+    </div>`;
+  }).join("") : `<div class="empty">기록이 없어요</div>`;
+}
+
+function renderChart() {
+  const S = STATE.summary, k = STATE.chart;
+  const W = 340, H = 190, P = { l: 8, r: 8, t: 22, b: 28 };
+  const series = S.map(s => k === "cost" ? [s.확정 || 0, s.추정 || 0] : k === "dist" ? [s.주행거리 || 0, 0] : [s.kwh || 0, 0]);
+  const max = Math.max(1, ...series.map(v => v[0] + v[1]));
+  const bw = Math.min(64, (W - P.l - P.r) / Math.max(1, S.length) * 0.55);
+  const step = (W - P.l - P.r) / Math.max(1, S.length);
+  const sc = v => v / max * (H - P.t - P.b);
+  const fmt = v => k === "cost" ? won(v) + "원" : k === "dist" ? num(v, 0) + "km" : num(v, 0) + "kWh";
+  let g = `<line x1="${P.l}" x2="${W - P.r}" y1="${H - P.b}" y2="${H - P.b}" stroke="var(--line)"/>`;
+  S.forEach((s, i) => {
+    const x = P.l + step * i + (step - bw) / 2, [a, b] = series[i];
+    const ha = sc(a), hb = sc(b), y0 = H - P.b;
+    g += `<rect x="${x}" y="${y0 - ha}" width="${bw}" height="${ha}" rx="4" fill="${k === "cost" ? "var(--ok)" : "var(--blue)"}"/>`;
+    if (b) g += `<rect x="${x}" y="${y0 - ha - hb}" width="${bw}" height="${hb}" rx="4" fill="var(--est)" fill-opacity=".85"/>`;
+    g += `<text x="${x + bw / 2}" y="${y0 - ha - hb - 6}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--fg)">${fmt(a + b)}</text>`;
+    g += `<text x="${x + bw / 2}" y="${H - 9}" text-anchor="middle" font-size="12" fill="var(--mut)">${mLabel(s.월)}</text>`;
+  });
+  $("#chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월별 그래프">${g}</svg>`;
+  $("#legend").innerHTML = k === "cost" ? `<span><i style="background:var(--ok)"></i>확정</span><span><i style="background:var(--est)"></i>추정</span>` : k === "dist" ? `<span><i style="background:var(--blue)"></i>오도미터 기준 주행거리</span>` : `<span><i style="background:var(--blue)"></i>추정 충전량(kWh)</span>`;
+}
+
+function segHandler(sel, key, attr) {
+  $(sel).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    STATE[key] = b.dataset[attr];
+    $(sel).querySelectorAll("button").forEach(x => x.setAttribute("aria-selected", x === b));
+    key === "chart" ? renderChart() : render();
+  });
+}
+segHandler("#chartSeg", "chart", "k");
+segHandler("#filterSeg", "filter", "f");
+$("#monthTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { STATE.month = b.dataset.m; render(); } });
+$("#loginBtn").addEventListener("click", () => loadLive(true));
+$("#logoutBtn").addEventListener("click", logout);
+$("#refresh").addEventListener("click", () => {
+  if (isConfigured() && isSecureOrigin() && AUTH.gisReady && (tokenValid() || hasFlag())) loadLive(true);
+  else showSnapshot();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && STATE.source === "live" && !tokenValid() && AUTH.gisReady && !BUSY) loadLive(false);
+});
+$("#originHint").textContent = location.origin && location.origin !== "null" ? location.origin : "(파일로 열림 · https 아님)";
+
+/* ===== Boot ===== */
+showSnapshot();
+if (isConfigured() && isSecureOrigin()) {
+  loadGIS().then(() => {
+    initClient(); updateAuthUI();
+    if (hasFlag()) loadLive(false); // 이전에 로그인했으면 prompt:'' 로 조용히 재시도
+  }).catch(e => showSnapshot("error", e));
+}
+</script>
+</body>
+</html>
