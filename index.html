@@ -143,6 +143,9 @@ footer{line-height:1.5}
 .pk span{color:var(--mut)}
 .pk b{font-size:15px;font-variant-numeric:tabular-nums;min-width:86px;text-align:right}
 .pk b small{font-size:11px;font-weight:600;color:var(--mut);margin-left:2px}
+.pk.iv{grid-template-columns:auto 1fr auto;margin-top:6px;font-size:12px}
+.pk.iv span:nth-child(2){text-align:right;font-variant-numeric:tabular-nums}
+.pk.iv b{min-width:72px;font-size:13px}
 .pkb{height:10px;border-radius:999px;background:color-mix(in srgb,var(--mut) 15%,transparent);overflow:hidden}
 .pkb i{display:block;height:100%;border-radius:999px}
 .svt td:last-child{color:var(--ok)}
@@ -214,7 +217,7 @@ footer{line-height:1.5}
 </ul>
 <p><b>처음 설정</b>: Google Cloud 콘솔에서 웹 애플리케이션용 OAuth 클라이언트 ID를 만들고, <b>승인된 JavaScript 원본</b>에 이 페이지의 주소(예: <code>https://아이디.github.io</code>)를 넣은 뒤, HTML 상단 <code>CONFIG.CLIENT_ID</code>를 그 값으로 바꿔요.</p>
 <p><b>출퇴근 메뉴</b>: 같은 <b>주행기록</b> 탭(출발ETA·평균속도·날씨·기온 열 포함)으로 계산해요. 시간대 폭과 참고용 기준은 HTML 상단 <code>CONFIG.COMMUTE</code>에서 바꿀 수 있어요.</p>
-<p><b>내연기관 대비 절약</b>: 월별요약의 주행거리·충전비 합계로 매번 계산해요. 비교 연비와 월별 유가는 HTML 상단 <code>CONFIG.COMPARE</code>에서 바꾸거나 새 달을 추가할 수 있어요.</p>
+<p><b>내연기관 대비 절약</b>: 주행기록의 배터리 %와 충전기록으로 실제 소비한 전기(kWh)를 구하고, 먼저 충전한 전기부터 쓰는 FIFO 단가로 전기료를 매번 계산해요. 배터리에 남은 전기는 '남은 전기(재고)'로 따로 보여 줘요. 비교 연비와 월별 유가는 HTML 상단 <code>CONFIG.COMPARE</code>에서 바꾸거나 새 달을 추가할 수 있어요.</p>
 <p>현재 페이지 원본: <code id="originHint"></code></p>
 </details></div>
 <footer>추정kWh = 충전% × 81.3 kWh(추정 용량). 집 충전 금액은 다음 달 말 관리비로 청구되기 전까지 추정값이에요.<br>🚗 주행 = 직전 충전 직후 첫 운행부터 이번 충전 직전 운행까지(주행기록 탭). 배터리 사용 = 직전 충전 후 % − 이번 충전 전 %(주차·대기 소모 포함), 전비 = 주행 km ÷ 사용 kWh.</footer>
@@ -494,7 +497,17 @@ function recommend(bands, dir, cfg) {
   const next = elig.filter(b => b !== best).sort((a, b) => a.avg - b.avg)[0] || null;
   return { kind: "best", band: best, ref: best.n < cfg.RELIABLE_N, next, spread };
 }
-/* ===== 내연기관 대비 절약 계산 (월별요약의 주행거리·충전비 합계 사용) =====
+/* ===== 내연기관 대비 절약 계산 — 소비 전력량(kWh) 기준 · FIFO =====
+   전기차 비용 = 실제로 쓴 전기(kWh) × 그 전기를 충전할 때의 원/kWh.
+   1) 배터리 타임라인: 주행기록(시작/종료 배터리 %)과 충전기록(충전 전/후 %)을 시간순으로 이어요.
+      · 운행 중 하락 = 주행 소비, 운행 사이 하락 = 주차·대기 소비(기록되지 않은 짧은 운행 포함 가능). 둘 다 비용에 넣어요.
+      · 충전으로 오른 %는 소비가 아니라 새 '충전 로트'(원/kWh = 금액 ÷ (충전% × 용량))가 돼요.
+   2) FIFO: 먼저 충전한 전기를 먼저 쓴 것으로 보고 로트 단가를 배정해요.
+      · 출고 시 잔량(첫 운행 시작 %)은 별도 결제가 없어 0원 로트로 두고 따로 표시해요.
+      · %가 없는 극소 충전(예: 191원)은 그 시점 가장 최근 로트 금액에 더해요(없으면 다음 로트).
+      · 금액이 비어 있는 충전은 0원으로 두고 "금액 미기록"으로 표시해요.
+   3) 지금 배터리에 남은 전기는 '남은 전기(재고)'로 따로 보여 주고 소비 비용에서 빼요.
+   4) 월 = 소비가 일어난 달(대기 소비는 다음 기록 시점의 달). km은 월별요약 주행거리(오도미터)를 써요.
    cmp는 CONFIG.COMPARE 모양 그대로. 나중에 연비 입력란을 붙이려면 {...CONFIG.COMPARE, GASOLINE_KMPL: 입력값}으로 넘기면 돼요. */
 function fuelPriceFor(month, cmp) {
   const P = cmp.FUEL_PRICE || {};
@@ -503,19 +516,88 @@ function fuelPriceFor(month, cmp) {
   if (prev) return { ...P[prev], from: prev, fallback: true };
   return { ...cmp.FUEL_PRICE_DEFAULT, from: null, fallback: true };
 }
-function computeSavings(summary, cmp) {
-  const months = summary.map(s => {
-    const km = s.주행거리 || 0, ev = s.합계 ?? ((s.확정 || 0) + (s.추정 || 0)), fp = fuelPriceFor(s.월, cmp);
+function energyLedger(charges, trips, capKWh) {
+  const cap = (capKWh || 81.3) / 100, T = (trips || []).filter(t => t.s != null && t.e != null);
+  const ev = [];
+  T.forEach((t, i) => ev.push({ k: t.날짜 + " " + t.출발, o: 1, i, t }));
+  (charges || []).forEach((c, i) => ev.push({ k: c.날짜 + " " + hm(c.시각), o: 0, i, c }));
+  ev.sort((a, b) => a.k.localeCompare(b.k) || a.o - b.o || a.i - b.i);
+  const lots = [], q = [], byMonth = {}, anomalies = [];
+  let L = null, pendingWon = 0, initPct = 0, chargedPct = 0, chargedWon = 0;
+  const M = m => byMonth[m] || (byMonth[m] = { drive: 0, idle: 0, cost: 0, estCost: 0, estPct: 0, initPct: 0, unpricedPct: 0 });
+  const newLot = (pct, won, extra) => { const lot = { pct, left: pct, won: won + pendingWon, ...extra }; pendingWon = 0; lot.perPct = pct > 0 ? lot.won / pct : 0; lots.push(lot); q.push(lot); return lot; };
+  const consume = (pct, month, kind) => {
+    if (!(pct > 0)) return; const m = M(month); m[kind] += pct;
+    while (pct > 1e-9) {
+      const lot = q[0];
+      if (!lot) { anomalies.push(`${month} 로트 없이 ${pct.toFixed(1)}% 소비`); m.unpricedPct += pct; break; }
+      const x = Math.min(pct, lot.left); lot.left -= x; pct -= x;
+      const won = x * lot.perPct; m.cost += won;
+      if (lot.init) m.initPct += x; else if (lot.unpriced) m.unpricedPct += x;
+      if (lot.est) { m.estCost += won; m.estPct += x; }
+      if (lot.left <= 1e-9) q.shift();
+    }
+  };
+  for (const e of ev) {
+    const month = e.k.slice(0, 7);
+    if (e.t) {
+      const t = e.t;
+      if (L == null) { L = t.s; initPct = t.s; newLot(t.s, 0, { init: true, label: "출고 시 잔량", date: t.날짜 }); }
+      if (t.s < L) consume(L - t.s, month, "idle");
+      else if (t.s > L) { anomalies.push(`${t.날짜} ${t.출발} 충전 기록 없이 +${t.s - L}%`); chargedPct += t.s - L; newLot(t.s - L, 0, { unpriced: true, label: "충전 기록 없음", date: t.날짜 }); }
+      consume(t.s - t.e, month, "drive");
+      if (t.e > t.s) anomalies.push(`${t.날짜} ${t.출발} 운행 중 % 상승`);
+      L = t.e;
+    } else {
+      const c = e.c;
+      if (L == null) continue; // 첫 운행 이전 충전은 출고 잔량에 포함
+      if (c.충전 == null || !(c.충전 > 0)) { // 극소 충전: 금액만 반영
+        chargedWon += c.금액 || 0;
+        if (lots.length) { const lot = lots[lots.length - 1]; lot.won += c.금액 || 0; lot.perPct = lot.pct ? lot.won / lot.pct : 0; lot.extra = (lot.extra || 0) + (c.금액 || 0); }
+        else pendingWon += c.금액 || 0;
+        continue;
+      }
+      if (c.전 != null && c.전 < L) consume(L - c.전, month, "idle");
+      const before = c.전 != null ? c.전 : L;
+      chargedPct += c.충전; chargedWon += c.금액 || 0;
+      newLot(c.충전, c.금액 || 0, { est: c.상태 === "추정", unpriced: c.금액 == null, label: c.구분 || "", date: c.날짜, 월: c.월 });
+      L = before + c.충전;
+    }
+  }
+  const inv = q.filter(l => l.left > 1e-9).map(l => ({ date: l.date, label: l.label, pct: l.left, kwh: l.left * cap, won: l.left * l.perPct, perKWh: l.perPct / cap, est: !!l.est, init: !!l.init }));
+  const used = Object.values(byMonth).reduce((a, m) => a + m.drive + m.idle, 0);
+  return { cap, byMonth, lots: lots.map(l => ({ ...l, perKWh: l.perPct / cap })), inventory: inv, current: L, initPct, chargedPct, chargedWon, usedPct: used, anomalies,
+    check: { pct: initPct + chargedPct - (L ?? 0) - used, won: chargedWon - Object.values(byMonth).reduce((a, m) => a + m.cost, 0) - inv.reduce((a, l) => a + l.won, 0) } };
+}
+function computeSavings(summary, cmp, charges, trips, capKWh) {
+  const G = energyLedger(charges, trips, capKWh), cap = G.cap;
+  const kmBy = Object.fromEntries((summary || []).map(s => [s.월, s.주행거리 || 0]));
+  for (const t of trips || []) { const m = t.날짜.slice(0, 7); if (!(m in kmBy)) kmBy[m] = 0; }
+  const tripKm = {}; for (const t of trips || []) { const m = t.날짜.slice(0, 7); tripKm[m] = (tripKm[m] || 0) + (t.km || 0); }
+  const months = Object.keys({ ...kmBy, ...G.byMonth }).sort().map(mo => {
+    const b = G.byMonth[mo] || { drive: 0, idle: 0, cost: 0, estCost: 0, estPct: 0, initPct: 0, unpricedPct: 0 };
+    const km = kmBy[mo] || tripKm[mo] || 0, fp = fuelPriceFor(mo, cmp), ev = b.cost;
     const gas = km / cmp.GASOLINE_KMPL * fp.gas, diesel = km / cmp.DIESEL_KMPL * fp.diesel;
-    return { 월: s.월, km, ev, gas, diesel, saveGas: gas - ev, saveDiesel: diesel - ev, price: fp,
-      est: (s.추정 || 0) > 0, estAmt: s.추정 || 0, noCharge: !(s.충전횟수 > 0) && !(ev > 0) };
+    const kwh = (b.drive + b.idle) * cap;
+    return { 월: mo, km, kwh, driveKWh: b.drive * cap, idleKWh: b.idle * cap, initKWh: b.initPct * cap, unpricedKWh: b.unpricedPct * cap,
+      ev, perKm: km && kwh > 0 ? ev / km : null, perKWh: kwh - b.initPct * cap > 0 ? ev / (kwh - b.initPct * cap) : null,
+      gas, diesel, saveGas: gas - ev, saveDiesel: diesel - ev, price: fp, est: b.estCost > 0, estAmt: b.estCost, estKWh: b.estPct * cap };
   });
   const sum = k => months.reduce((a, m) => a + m[k], 0);
-  const km = sum("km"), ev = sum("ev"), gas = sum("gas"), diesel = sum("diesel");
-  return { months, total: { km, ev, gas, diesel, saveGas: gas - ev, saveDiesel: diesel - ev,
-    rateGas: gas ? (gas - ev) / gas : null, rateDiesel: diesel ? (diesel - ev) / diesel : null,
-    perKm: { ev: km ? ev / km : null, gas: km ? gas / km : null, diesel: km ? diesel / km : null },
-    est: months.some(m => m.est), estAmt: sum("estAmt") } };
+  const km = sum("km"), ev = sum("ev"), gas = sum("gas"), diesel = sum("diesel"), kwh = sum("kwh");
+  const inv = G.inventory, invKWh = inv.reduce((a, l) => a + l.kwh, 0), invWon = inv.reduce((a, l) => a + l.won, 0);
+  return { months, ledger: G, inventory: { lots: inv, kwh: invKWh, won: invWon, pct: G.current, est: inv.some(l => l.est), estWon: inv.filter(l => l.est).reduce((a, l) => a + l.won, 0) },
+    total: { km, kwh, driveKWh: sum("driveKWh"), idleKWh: sum("idleKWh"), initKWh: sum("initKWh"), unpricedKWh: sum("unpricedKWh"), ev, gas, diesel, saveGas: gas - ev, saveDiesel: diesel - ev,
+      rateGas: gas ? (gas - ev) / gas : null, rateDiesel: diesel ? (diesel - ev) / diesel : null,
+      perKm: { ev: km ? ev / km : null, gas: km ? gas / km : null, diesel: km ? diesel / km : null },
+      est: months.some(m => m.est), estAmt: sum("estAmt"), charged: G.chargedWon } };
+}
+/* 참고용: 예전 단순 방식(월 충전비 합계 ÷ 월 주행km). 화면에서는 쓰지 않고 비교·검증에만 써요. */
+function computeSavingsSimple(summary, cmp) {
+  const months = summary.map(s => { const km = s.주행거리 || 0, ev = s.합계 ?? ((s.확정 || 0) + (s.추정 || 0)), fp = fuelPriceFor(s.월, cmp);
+    const gas = km / cmp.GASOLINE_KMPL * fp.gas, diesel = km / cmp.DIESEL_KMPL * fp.diesel; return { 월: s.월, km, ev, gas, diesel, saveGas: gas - ev, saveDiesel: diesel - ev }; });
+  const sum = k => months.reduce((a, m) => a + m[k], 0), km = sum("km"), ev = sum("ev"), gas = sum("gas"), diesel = sum("diesel");
+  return { months, total: { km, ev, gas, diesel, saveGas: gas - ev, saveDiesel: diesel - ev } };
 }
 /*__PARSE_END__*/
 
@@ -756,18 +838,21 @@ function driveBlock(g, title, ok = true) {
 }
 
 function renderSavings() {
-  const cmp = CONFIG.COMPARE, R = computeSavings(STATE.summary, cmp), T = R.total;
+  const cmp = CONFIG.COMPARE, R = computeSavings(STATE.summary, cmp, STATE.charges, STATE.trips, CONFIG.BATTERY_KWH), T = R.total, I = R.inventory;
   const pct = r => r == null ? "-" : (r * 100).toFixed(1) + "%";
   const warn = `<span class="badge b-est">⚠️ 추정 포함</span>`;
+  const mn = m => `${Number(m.slice(5))}월`;
   const card = (l, v, s, cls = "") => `<div class="card kpi${cls}"><div class="l">${l}</div><div class="v">${v}<small>원</small></div><div class="s">${s}</div></div>`;
   const pk = T.perKm, bar = (lbl, v, color) => `<div class="pk"><span>${lbl}</span><div class="pkb"><i style="width:${pk.gas ? Math.max(2, v / Math.max(pk.gas, pk.diesel) * 100) : 0}%;background:${color}"></i></div><b>${num(v, 1)}<small>원/km</small></b></div>`;
   const rows = R.months.map(m => {
-    const lbl = `${Number(m.월.slice(5))}월`, f = m.price.fallback ? `<sup title="유가 기준: 직전 달">†</sup>` : "";
-    return `<tr><td>${lbl}${m.est ? " ⚠️" : ""}${m.noCharge ? " <span class=\"nc\">충전 0</span>" : ""}</td><td>${num(m.km)}</td><td>${won(m.ev)}</td><td>${won(m.gas)}${f}</td><td>${won(m.diesel)}${f}</td><td>${won(m.saveGas)}<span class="sd">${won(m.saveDiesel)}</span></td></tr>`;
+    const f = m.price.fallback ? `<sup title="유가 기준: 직전 달">†</sup>` : "";
+    return `<tr><td>${mn(m.월)}${m.est ? " ⚠️" : ""}${m.initKWh > 0 ? `<sup title="출고 시 잔량 포함">*</sup>` : ""}</td><td>${num(m.km)}</td><td>${num(m.kwh)}</td><td>${won(m.ev)}<span class="sd">${m.perKm != null ? num(m.perKm, 1) + "원/km" : "-"}</span></td><td>${won(m.gas)}${f}<span class="sd">${won(m.diesel)}${f}</span></td><td>${won(m.saveGas)}<span class="sd">${won(m.saveDiesel)}</span></td></tr>`;
   }).join("");
-  const fb = R.months.filter(m => m.price.fallback);
-  const noC = R.months.filter(m => m.noCharge);
+  const fb = R.months.filter(m => m.price.fallback), initM = R.months.filter(m => m.initKWh > 0);
+  const invRows = I.lots.map(l => `<div class="pk iv"><span>${esc(md(l.date))} ${esc(l.init ? "출고" : l.label)}</span><span>${num(l.kwh)} kWh × ${won(l.perKWh)}원</span><b>${won(l.won)}<small>원</small>${l.est ? " ⚠️" : ""}</b></div>`).join("");
+  const bad = Math.abs(R.ledger.check.pct) > 0.01 || R.ledger.anomalies.length;
   $("#savings").innerHTML = R.months.length ? `
+  <div class="note" style="margin:0 2px 8px">📐 <b>계산 방식</b>: 실제로 쓴 전기(kWh) × 그 전기의 충전 단가(먼저 충전한 전기부터 쓰는 FIFO). 배터리에 남은 전기는 비용에서 빼요.</div>
   <div class="grid">
     ${card("휘발유차 대비 누적 절약", won(T.saveGas), `절약률 ${pct(T.rateGas)}<br>휘발유 연료비 ${won(T.gas)}원`, " sv")}
     ${card("경유차 대비 누적 절약", won(T.saveDiesel), `절약률 ${pct(T.rateDiesel)}<br>경유 연료비 ${won(T.diesel)}원`, " sv")}
@@ -776,20 +861,28 @@ function renderSavings() {
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
       <div style="font-size:13px;color:var(--mut)">km당 비용 · 누적 ${num(T.km)} km</div>${T.est ? warn : ""}</div>
     ${bar("⚡ 전기차", pk.ev, "var(--ok)")}${bar("⛽ 휘발유", pk.gas, "var(--acc)")}${bar("🛢️ 경유", pk.diesel, "var(--est)")}
-    <div class="note">전기차 충전비 누적 ${won(T.ev)}원${T.est ? ` (집 충전 추정 ${won(T.estAmt)}원 포함)` : ""}</div>
+    <div class="note">소비 전기 ${num(T.kwh)} kWh(주행 ${num(T.driveKWh)} · 주차·대기 ${num(T.idleKWh)}) → 전기료 ${won(T.ev)}원${T.est ? ` (집 충전 추정 단가분 ${won(T.estAmt)}원 포함)` : ""}${T.initKWh > 0 ? `. 이 중 ${num(T.initKWh)} kWh는 출고 시 잔량이라 0원이에요` : ""}.</div>
   </div>
   <div class="card" style="margin-top:10px">
-    <div class="sub" style="margin-top:0">월별 비교 <span style="font-weight:500;color:var(--mut)">(원)</span></div>
-    <div class="tw"><table class="svt">
-      <thead><tr><th style="text-align:left">월</th><th>주행km</th><th>충전비</th><th>휘발유차</th><th>경유차</th><th>절약<br><span class="sd">휘발유 / 경유</span></th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr><td>합계${T.est ? " ⚠️" : ""}</td><td>${num(T.km)}</td><td>${won(T.ev)}</td><td>${won(T.gas)}</td><td>${won(T.diesel)}</td><td>${won(T.saveGas)}<span class="sd">${won(T.saveDiesel)}</span></td></tr></tfoot>
-    </table></div>
-    ${T.est ? `<div class="note">⚠️ <b>추정 포함</b>: ${R.months.filter(m => m.est).map(m => `${Number(m.월.slice(5))}월 집 충전 추정 ${won(m.estAmt)}원`).join(", ")}. 관리비 청구로 확정되면 자동으로 바뀌어요.</div>` : ""}
-    ${noC.length ? `<div class="note">ℹ️ ${noC.map(m => Number(m.월.slice(5)) + "월").join(", ")}은 아직 충전 기록이 없어요(전월 충전분으로 주행 중). 충전비가 0원이라 그 달 절약액은 실제보다 크게 보일 수 있어요.</div>` : ""}
-    ${fb.length ? `<div class="note">† 유가 기준: 직전 달 — ${fb.map(m => `${Number(m.월.slice(5))}월은 ${m.price.from ? Number(m.price.from.slice(5)) + "월" : "기본"} 유가 사용`).join(", ")}</div>` : ""}
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <div style="font-size:13px;color:var(--mut)">🔋 남은 전기(재고) · 배터리 ${num(I.pct, 0)}%</div>${I.est ? warn : ""}</div>
+    <div style="font-size:24px;font-weight:800;margin:4px 0 2px">${num(I.kwh)}<small style="font-size:13px;color:var(--mut)"> kWh</small> · ${won(I.won)}<small style="font-size:13px;color:var(--mut)"> 원</small></div>
+    ${invRows}
+    <div class="note">아직 쓰지 않은 전기의 충전 금액이에요. 절약 계산에는 넣지 않고, 앞으로 달리면서 쓰는 만큼 그 달 전기료로 넘어가요. 충전비 누적 ${won(T.charged)}원 = 쓴 전기 ${won(T.ev)}원 + 남은 전기 ${won(I.won)}원.</div>
   </div>
-  <div class="note" style="margin:8px 2px 0">같은 거리를 휘발유차(${num(cmp.GASOLINE_KMPL)} km/L)·경유차(${num(cmp.DIESEL_KMPL)} km/L)로 달렸다고 가정한 연료비와 실제 충전비의 차이예요. 연비는 <b>가정값</b>이고, 유가는 ${esc(cmp.SOURCE)}(월 평균, 원/L)예요. 주행거리는 월별요약의 오도미터 기준이에요. 보험·정비·자동차세 등은 포함하지 않아요.</div>`
+  <div class="card" style="margin-top:10px">
+    <div class="sub" style="margin-top:0">월별 비교 <span style="font-weight:500;color:var(--mut)">(원 · 달린 달 기준)</span></div>
+    <div class="tw"><table class="svt">
+      <thead><tr><th style="text-align:left">월</th><th>주행km</th><th>소비<br>kWh</th><th>전기료<br><span class="sd">원/km</span></th><th>휘발유차<br><span class="sd">경유차</span></th><th>절약<br><span class="sd">휘발유 / 경유</span></th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td>합계${T.est ? " ⚠️" : ""}</td><td>${num(T.km)}</td><td>${num(T.kwh)}</td><td>${won(T.ev)}<span class="sd">${num(pk.ev, 1)}원/km</span></td><td>${won(T.gas)}<span class="sd">${won(T.diesel)}</span></td><td>${won(T.saveGas)}<span class="sd">${won(T.saveDiesel)}</span></td></tr></tfoot>
+    </table></div>
+    ${T.est ? `<div class="note">⚠️ <b>추정 포함</b>: ${R.months.filter(m => m.est).map(m => `${mn(m.월)} 전기료 중 ${won(m.estAmt)}원`).join(", ")}이 집 충전 추정 단가(관리비 청구 전)로 계산됐어요. 청구로 확정되면 자동으로 바뀌어요.</div>` : ""}
+    ${initM.length ? `<div class="note">* ${initM.map(m => `${mn(m.월)}은 출고 시 잔량 ${num(m.initKWh)} kWh를 0원으로 포함`).join(", ")}(별도로 낸 돈이 없어서). 그래서 그 달 원/km가 낮게 보여요.</div>` : ""}
+    ${fb.length ? `<div class="note">† 유가 기준: 직전 달 — ${fb.map(m => `${mn(m.월)}은 ${m.price.from ? mn(m.price.from) : "기본"} 유가 사용`).join(", ")}</div>` : ""}
+    ${bad ? `<div class="note">⚠️ 배터리 기록 확인 필요: ${esc(R.ledger.anomalies.join(", ") || "배터리 합계 불일치")}</div>` : ""}
+  </div>
+  <div class="note" style="margin:8px 2px 0">같은 거리를 휘발유차(${num(cmp.GASOLINE_KMPL)} km/L)·경유차(${num(cmp.DIESEL_KMPL)} km/L)로 달렸다고 가정한 연료비와 실제 소비 전기료의 차이예요. 소비 kWh = 줄어든 배터리 % × ${num(CONFIG.BATTERY_KWH / 100, 3)}(추정). 주차·대기 소비는 운행 사이 배터리 하락(기록되지 않은 짧은 운행 포함 가능)이라 비용에 넣었어요. 연비는 <b>가정값</b>이고, 유가는 ${esc(cmp.SOURCE)}(월 평균, 원/L)예요. 주행거리는 월별요약의 오도미터 기준이에요. 보험·정비·자동차세 등은 포함하지 않아요.</div>`
   : `<div class="card empty">데이터가 없어요</div>`;
 }
 
